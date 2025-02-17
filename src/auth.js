@@ -1,22 +1,23 @@
-var CLIENT_ID = PropertiesService.getScriptProperties().getProperty('client_id');
-var CLIENT_SECRET = PropertiesService.getScriptProperties().getProperty('client_secret');
+const CLIENT_ID =
+	PropertiesService.getScriptProperties().getProperty("client_id");
+const CLIENT_SECRET =
+	PropertiesService.getScriptProperties().getProperty("client_secret");
 const admobAPIService = getAdmobAPIService();
 
 // スプレッドシートのメニューにAdmob API認可用のボタンを設置
 // スプレッドシートを開いたタイミングで、「Admob API連携」メニューが追加される。
 function onOpen(e) {
-  SpreadsheetApp.getUi()
-    .createMenu("Admob API連携")
-    .addItem("認可処理", "initAuth")
-    .addToUi();
+	SpreadsheetApp.getUi()
+		.createMenu("Admob API連携")
+		.addItem("認可処理", "initAuth")
+		.addToUi();
 }
-
 
 // Admob API認可URLをダイアログに表示
 function initAuth() {
-  console.log(1);
-  const authorizationUrl = admobAPIService.getAuthorizationUrl();
-  const template = HtmlService.createTemplate(`
+	console.log(1);
+	const authorizationUrl = admobAPIService.getAuthorizationUrl();
+	const template = HtmlService.createTemplate(`
     <html>
       <head>
         <style>
@@ -50,36 +51,36 @@ function initAuth() {
       </body>
     </html>
   `);
-  console.log(2);
-  template.authorizationUrl = authorizationUrl;
-  const html = template.evaluate();
-  const title = "Admobアプリの認可処理";
-  console.log(3);
-  const htmlOutput = HtmlService.createHtmlOutput(html)
-    .setWidth(400)
-    .setHeight(150);
-  SpreadsheetApp.getUi().showModelessDialog(htmlOutput, title);
+	console.log(2);
+	template.authorizationUrl = authorizationUrl;
+	const html = template.evaluate();
+	const title = "Admobアプリの認可処理";
+	console.log(3);
+	const htmlOutput = HtmlService.createHtmlOutput(html)
+		.setWidth(400)
+		.setHeight(150);
+	SpreadsheetApp.getUi().showModelessDialog(htmlOutput, title);
 }
 
 // OAuthの準備
 function getAdmobAPIService() {
-  return OAuth2.createService("AdmobAPI")
-    .setAuthorizationBaseUrl("https://accounts.google.com/o/oauth2/auth")
-    .setTokenUrl("https://oauth2.googleapis.com/token")
-    .setClientId(CLIENT_ID)
-    .setClientSecret(CLIENT_SECRET)
-    .setCallbackFunction("authCallback")
-    .setPropertyStore(PropertiesService.getUserProperties())
-    .setScope("https://www.googleapis.com/auth/admob.readonly")
-    .setParam("access_type", "offline")
-    .setParam('prompt', 'consent');
+	return OAuth2.createService("AdmobAPI")
+		.setAuthorizationBaseUrl("https://accounts.google.com/o/oauth2/auth")
+		.setTokenUrl("https://oauth2.googleapis.com/token")
+		.setClientId(CLIENT_ID)
+		.setClientSecret(CLIENT_SECRET)
+		.setCallbackFunction("authCallback")
+		.setPropertyStore(PropertiesService.getUserProperties())
+		.setScope("https://www.googleapis.com/auth/admob.readonly")
+		.setParam("access_type", "offline")
+		.setParam("prompt", "consent");
 }
 
 // 認証処理後のコールバックの処理を定義
 function authCallback(request) {
-  const isAuthorized = admobAPIService.handleCallback(request);
-  if (isAuthorized) {
-    var htmlContent = `
+	const isAuthorized = admobAPIService.handleCallback(request);
+	if (isAuthorized) {
+		const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -107,9 +108,10 @@ function authCallback(request) {
     </body>
     </html>
     `;
-    return HtmlService.createHtmlOutput(htmlContent);
-  } else {
-    var htmlContent = `
+		return HtmlService.createHtmlOutput(htmlContent);
+	}
+
+	const htmlContent = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -137,6 +139,5 @@ function authCallback(request) {
       </body>
     </html>
     `;
-    return HtmlService.createHtmlOutput(htmlContent);
-  }
+	return HtmlService.createHtmlOutput(htmlContent);
 }
