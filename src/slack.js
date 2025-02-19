@@ -15,6 +15,7 @@ const formatReportForSlack = (revenueReport) => {
 	const earningsColumnWidth = 12;
 
 	const summaryLines = [
+		`*${_generateYesterdayDate()}の収益*`,
 		"```",
 		_generateSummaryHeader(appNameColumnWidth, earningsColumnWidth),
 		_generateSeparatorLine(appNameColumnWidth, earningsColumnWidth),
@@ -33,6 +34,15 @@ const formatReportForSlack = (revenueReport) => {
 	];
 
 	return summaryLines.join("\n");
+};
+
+const _generateYesterdayDate = () => {
+	return new Date(Date.now() - 86400000).toLocaleDateString("ja-JP", {
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		weekday: "narrow",
+	});
 };
 
 const _generateSummaryHeader = (appNameColumnWidth, earningsColumnWidth) => {
@@ -54,8 +64,8 @@ const _generateSummaryLine = (
 			appNameColumnWidth - entry.appName.length / 2,
 			" ",
 		);
-		const earnings = `${entry.earnings.toFixed(0)}円`.padStart(
-			earningsColumnWidth - 1 / 2,
+		const earnings = `¥${entry.earnings.toFixed(0)}`.padStart(
+			earningsColumnWidth - 1,
 			" ",
 		);
 		return `| ${appName} | ${earnings} |`;
@@ -67,7 +77,7 @@ const _generateTotalLine = (
 	earningsColumnWidth,
 	totalEarnings,
 ) => {
-	return `| ${"total".padEnd(appNameColumnWidth, " ")} | ${`${totalEarnings.toFixed(0)}円`.padStart(earningsColumnWidth, " ")} |`;
+	return `| ${"total".padEnd(appNameColumnWidth, " ")} | ${`¥${totalEarnings.toFixed(0)}`.padStart(earningsColumnWidth, " ")} |`;
 };
 
 // #admob-revenueにメッセージを送信する
