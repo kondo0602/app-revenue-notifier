@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      csv-parse:
+        specifier: ^6.2.1
+        version: 6.2.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
     devDependencies:
       '@biomejs/biome':
         specifier: 1.9.4
@@ -67,6 +74,12 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  csv-parse@6.2.1:
+    resolution: {integrity: sha512-LRLMV+UCyfMokp8Wb411duBf1gaBKJfOfBWU9eHMJ+b+cJYZsNu3AFmjJf3+yPGd59Exz1TsMjaSFyxnYB9+IQ==}
+
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
+
 snapshots:
 
   '@biomejs/biome@1.9.4':
@@ -103,3 +116,7 @@ snapshots:
 
   '@biomejs/cli-win32-x64@1.9.4':
     optional: true
+
+  csv-parse@6.2.1: {}
+
+  jose@6.2.3: {}

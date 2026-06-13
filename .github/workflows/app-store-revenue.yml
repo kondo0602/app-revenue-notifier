@@ -1,0 +1,42 @@
+name: Notify App Store Revenue
+
+on:
+  schedule:
+    - cron: "17 9 6 * *"
+      timezone: "Asia/Tokyo"
+  workflow_dispatch:
+    inputs:
+      report_month:
+        description: "Report month in YYYY-MM. Leave empty to use the previous month in JST."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.3
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run notify:app-store
+        env:
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_PRIVATE_KEY_BASE64 }}
+          APPSTORE_VENDOR_NUMBER: ${{ secrets.APPSTORE_VENDOR_NUMBER }}
+          REPORT_MONTH: ${{ github.event.inputs.report_month || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
