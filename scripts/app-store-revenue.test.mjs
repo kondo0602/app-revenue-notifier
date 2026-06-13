@@ -182,44 +182,34 @@ test("summarizes only App Store IAP and subscription rows", () => {
 		report.entries.map((entry) => ({
 			title: entry.title,
 			type: entry.productTypeIdentifier,
-			salesCurrency: entry.salesCurrency,
-			proceedsCurrency: entry.proceedsCurrency,
+			currency: entry.currency,
 			units: entry.units,
-			sales: entry.sales,
 			proceeds: entry.proceeds,
 		})),
 		[
 			{
 				title: "Monthly Premium",
 				type: "IAY",
-				salesCurrency: "JPY",
-				proceedsCurrency: "JPY",
+				currency: "JPY",
 				units: 3,
-				sales: 2100,
 				proceeds: 1500,
 			},
 			{
 				title: "Coin Pack",
 				type: "IA1",
-				salesCurrency: "USD",
-				proceedsCurrency: "USD",
+				currency: "USD",
 				units: 8,
-				sales: 7.92,
 				proceeds: 5.6,
 			},
 		],
 	);
-	assert.deepEqual(report.salesTotalsByCurrency, [
-		{ currency: "JPY", sales: 2100 },
-		{ currency: "USD", sales: 7.92 },
-	]);
-	assert.deepEqual(report.proceedsTotalsByCurrency, [
+	assert.deepEqual(report.totalsByCurrency, [
 		{ currency: "JPY", proceeds: 1500 },
 		{ currency: "USD", proceeds: 5.6 },
 	]);
 });
 
-test("keeps customer sales separate from developer proceeds", () => {
+test("uses developer proceeds instead of customer sales", () => {
 	const report = summarizeAppStoreSalesRows(
 		[
 			{
@@ -236,11 +226,8 @@ test("keeps customer sales separate from developer proceeds", () => {
 		"2026-05",
 	);
 
-	assert.deepEqual(report.salesTotalsByCurrency, [
-		{ currency: "JPY", sales: 444 },
-	]);
-	assert.equal(report.proceedsTotalsByCurrency[0].currency, "JPY");
-	assert.equal(roundMoney(report.proceedsTotalsByCurrency[0].proceeds), 296);
+	assert.equal(report.totalsByCurrency[0].currency, "JPY");
+	assert.equal(roundMoney(report.totalsByCurrency[0].proceeds), 296);
 });
 
 test("formats a Slack message with entries and currency totals", () => {
@@ -248,14 +235,15 @@ test("formats a Slack message with entries and currency totals", () => {
 	const report = summarizeAppStoreSalesRows(rows, "2026-05");
 	const message = formatSlackMessage(report);
 
-	assert.match(message, /App Store 2026-05 のアプリ内課金売上/);
-	assert.match(message, /Monthly Premium/);
+	assert.match(message, /2026\/05のApp Store収益/);
+	assert.match(message, /Monthly/);
 	assert.match(message, /Coin Pack/);
-	assert.match(message, /Total Sales/);
-	assert.match(message, /JPY 2,100\.00/);
-	assert.match(message, /Total Proceeds/);
-	assert.match(message, /JPY 1,500\.00/);
+	assert.match(message, /Item/);
+	assert.match(message, /Profit/);
+	assert.match(message, /¥1,500/);
 	assert.match(message, /USD 5\.60/);
+	assert.doesNotMatch(message, /Sales/);
+	assert.doesNotMatch(message, /Proceeds/);
 	assert.doesNotMatch(message, /App Download/);
 });
 

@@ -166,8 +166,7 @@ export function summarizeAppStoreSalesRows(rows, reportMonth) {
 	validateReportMonth(reportMonth);
 
 	const entryMap = new Map();
-	const proceedsTotalsByCurrency = new Map();
-	const salesTotalsByCurrency = new Map();
+	const totalsByCurrency = new Map();
 
 	for (const row of rows) {
 		const productTypeIdentifier = row["Product Type Identifier"]?.trim();
@@ -177,75 +176,53 @@ export function summarizeAppStoreSalesRows(rows, reportMonth) {
 
 		const units = parseNumber(row.Units);
 		const developerProceedsPerUnit = parseNumber(row["Developer Proceeds"]);
-		const customerPricePerUnit = parseNumber(row["Customer Price"]);
 		const proceeds = units * developerProceedsPerUnit;
-		const sales = calculateCustomerSales(units, customerPricePerUnit);
-		const proceedsCurrency = row["Currency of Proceeds"]?.trim() || "N/A";
-		const salesCurrency = row["Customer Currency"]?.trim() || proceedsCurrency;
+		const currency = row["Currency of Proceeds"]?.trim() || "N/A";
 		const title = row.Title?.trim() || "(untitled)";
 		const parentIdentifier = row["Parent Identifier"]?.trim() || "";
 		const entryKey = [
 			title,
 			parentIdentifier,
 			productTypeIdentifier,
-			salesCurrency,
-			proceedsCurrency,
+			currency,
 		].join("\u0000");
 
 		const entry = entryMap.get(entryKey) ?? {
 			title,
 			parentIdentifier,
 			productTypeIdentifier,
-			salesCurrency,
-			proceedsCurrency,
+			currency,
 			units: 0,
-			sales: 0,
 			proceeds: 0,
 		};
 
 		entry.units += units;
-		entry.sales += sales;
 		entry.proceeds += proceeds;
 		entryMap.set(entryKey, entry);
-		salesTotalsByCurrency.set(
-			salesCurrency,
-			(salesTotalsByCurrency.get(salesCurrency) ?? 0) + sales,
-		);
-		proceedsTotalsByCurrency.set(
-			proceedsCurrency,
-			(proceedsTotalsByCurrency.get(proceedsCurrency) ?? 0) + proceeds,
+		totalsByCurrency.set(
+			currency,
+			(totalsByCurrency.get(currency) ?? 0) + proceeds,
 		);
 	}
 
 	const entries = [...entryMap.values()].sort((a, b) => {
-		const proceedsCurrencyCompare = a.proceedsCurrency.localeCompare(
-			b.proceedsCurrency,
-		);
-		if (proceedsCurrencyCompare !== 0) {
-			return proceedsCurrencyCompare;
-		}
-		const salesCurrencyCompare = a.salesCurrency.localeCompare(b.salesCurrency);
-		if (salesCurrencyCompare !== 0) {
-			return salesCurrencyCompare;
+		const currencyCompare = a.currency.localeCompare(b.currency);
+		if (currencyCompare !== 0) {
+			return currencyCompare;
 		}
 		return b.proceeds - a.proceeds;
 	});
-	const proceedsTotals = formatTotals(proceedsTotalsByCurrency, "proceeds");
-	const salesTotals = formatTotals(salesTotalsByCurrency, "sales");
 
 	return {
 		reportMonth,
 		entries,
-		proceedsTotalsByCurrency: proceedsTotals,
-		salesTotalsByCurrency: salesTotals,
-		totalsByCurrency: proceedsTotals,
+		totalsByCurrency: formatTotals(totalsByCurrency),
 	};
 }
 
 export function formatSlackMessage(report) {
 	const lines = [
-		`*App Store ${report.reportMonth} のアプリ内課金売上*`,
-		"_Sales: Customer Price basis / Proceeds: Developer Proceeds basis_",
+		`*${formatReportMonthForTitle(report.reportMonth)}のApp Store収益*`,
 	];
 
 	if (report.entries.length === 0) {
@@ -260,13 +237,7 @@ export function formatSlackMessage(report) {
 		"```",
 		formatEntriesTable(report.entries),
 		"",
-		formatTotalsTable("Sales totals", report.salesTotalsByCurrency, "sales"),
-		"",
-		formatTotalsTable(
-			"Developer proceeds totals",
-			report.proceedsTotalsByCurrency,
-			"proceeds",
-		),
+		formatTotalsTable(report.totalsByCurrency),
 		"```",
 	].join("\n");
 }
@@ -307,72 +278,68 @@ export async function postSlackMessage(webhookUrl, text, fetchImpl = fetch) {
 }
 
 function formatEntriesTable(entries) {
+	const itemColumnWidth = 12;
+	const profitColumnWidth = 9;
 	const rows = [
-		["Product", "Type", "Units", "Sales", "Proceeds"],
-		[
-			"-".repeat(24),
-			"-".repeat(7),
-			"-".repeat(8),
-			"-".repeat(18),
-			"-".repeat(18),
-		],
+		formatTableRow("Item", "Profit", itemColumnWidth, profitColumnWidth),
+		formatSeparatorLine(itemColumnWidth, profitColumnWidth),
 	];
 
 	for (const entry of entries) {
-		const title =
-			entry.parentIdentifier && entry.parentIdentifier !== entry.title
-				? `${entry.title} (${entry.parentIdentifier})`
-				: entry.title;
-		rows.push([
-			truncate(title, 24),
-			entry.productTypeIdentifier,
-			formatNumber(entry.units),
-			formatMoney(entry.sales, entry.salesCurrency),
-			formatMoney(entry.proceeds, entry.proceedsCurrency),
-		]);
+		rows.push(
+			formatTableRow(
+				truncate(entry.title, itemColumnWidth),
+				formatMoney(entry.proceeds, entry.currency),
+				itemColumnWidth,
+				profitColumnWidth,
+			),
+		);
 	}
 
-	return rows
-		.map(
-			([product, type, units, sales, proceeds]) =>
-				`${product.padEnd(24)} | ${type.padEnd(7)} | ${units.padStart(
-					8,
-				)} | ${sales.padStart(18)} | ${proceeds.padStart(18)}`,
-		)
-		.join("\n");
+	return rows.join("\n");
 }
 
-function formatTotalsTable(title, totalsByCurrency, valueKey) {
-	const rows = [
-		["Currency", valueKey === "sales" ? "Total Sales" : "Total Proceeds"],
-		["-".repeat(8), "-".repeat(18)],
-		...totalsByCurrency.map((total) => [
-			total.currency,
-			formatMoney(total[valueKey], total.currency),
-		]),
-	];
+function formatTotalsTable(totalsByCurrency) {
+	const itemColumnWidth = 12;
+	const profitColumnWidth = 9;
+	const rows = [formatSeparatorLine(itemColumnWidth, profitColumnWidth)];
 
-	const table = rows
-		.map(
-			([currency, proceeds]) =>
-				`${currency.padEnd(8)} | ${proceeds.padStart(18)}`,
-		)
-		.join("\n");
+	for (const total of totalsByCurrency) {
+		const label =
+			total.currency === "JPY" ? "total" : `total ${total.currency}`;
+		rows.push(
+			formatTableRow(
+				label,
+				formatMoney(total.proceeds, total.currency),
+				itemColumnWidth,
+				profitColumnWidth,
+			),
+		);
+	}
 
-	return `${title}\n${table}`;
+	return rows.join("\n");
 }
 
-function formatTotals(totalsByCurrency, valueKey) {
+function formatTotals(totalsByCurrency) {
 	return [...totalsByCurrency.entries()]
-		.map(([currency, value]) => ({ currency, [valueKey]: value }))
+		.map(([currency, proceeds]) => ({ currency, proceeds }))
 		.sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
-function calculateCustomerSales(units, customerPricePerUnit) {
-	if (units === 0) {
-		return customerPricePerUnit;
-	}
-	return Math.abs(units) * customerPricePerUnit;
+function formatTableRow(item, profit, itemColumnWidth, profitColumnWidth) {
+	return `| ${padDisplay(item, itemColumnWidth)} | ${profit.padStart(
+		profitColumnWidth,
+	)} |`;
+}
+
+function formatSeparatorLine(itemColumnWidth, profitColumnWidth) {
+	return `|-${"-".repeat(itemColumnWidth)}-|-${"-".repeat(
+		profitColumnWidth,
+	)}-|`;
+}
+
+function padDisplay(value, width) {
+	return value.padEnd(width - countWideCharacters(value), " ");
 }
 
 function parseNumber(value) {
@@ -388,7 +355,16 @@ function parseNumber(value) {
 }
 
 function formatMoney(value, currency) {
+	if (currency === "JPY") {
+		return `¥${new Intl.NumberFormat("ja-JP", {
+			maximumFractionDigits: 0,
+		}).format(value)}`;
+	}
 	return `${currency} ${formatNumber(value)}`;
+}
+
+function formatReportMonthForTitle(reportMonth) {
+	return reportMonth.replace("-", "/");
 }
 
 function formatNumber(value) {
@@ -403,6 +379,10 @@ function truncate(value, maxLength) {
 		return value;
 	}
 	return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function countWideCharacters(value) {
+	return [...value].filter((char) => char.charCodeAt(0) > 255).length / 2;
 }
 
 function pad2(value) {
