@@ -166,7 +166,8 @@ export function summarizeAppStoreSalesRows(rows, reportMonth) {
 	validateReportMonth(reportMonth);
 
 	const entryMap = new Map();
-	const totalsByCurrency = new Map();
+	const proceedsTotalsByCurrency = new Map();
+	const salesTotalsByCurrency = new Map();
 
 	for (const row of rows) {
 		const productTypeIdentifier = row["Product Type Identifier"]?.trim();
@@ -176,56 +177,75 @@ export function summarizeAppStoreSalesRows(rows, reportMonth) {
 
 		const units = parseNumber(row.Units);
 		const developerProceedsPerUnit = parseNumber(row["Developer Proceeds"]);
+		const customerPricePerUnit = parseNumber(row["Customer Price"]);
 		const proceeds = units * developerProceedsPerUnit;
-		const currency = row["Currency of Proceeds"]?.trim() || "N/A";
+		const sales = calculateCustomerSales(units, customerPricePerUnit);
+		const proceedsCurrency = row["Currency of Proceeds"]?.trim() || "N/A";
+		const salesCurrency = row["Customer Currency"]?.trim() || proceedsCurrency;
 		const title = row.Title?.trim() || "(untitled)";
 		const parentIdentifier = row["Parent Identifier"]?.trim() || "";
 		const entryKey = [
 			title,
 			parentIdentifier,
 			productTypeIdentifier,
-			currency,
+			salesCurrency,
+			proceedsCurrency,
 		].join("\u0000");
 
 		const entry = entryMap.get(entryKey) ?? {
 			title,
 			parentIdentifier,
 			productTypeIdentifier,
-			currency,
+			salesCurrency,
+			proceedsCurrency,
 			units: 0,
+			sales: 0,
 			proceeds: 0,
 		};
 
 		entry.units += units;
+		entry.sales += sales;
 		entry.proceeds += proceeds;
 		entryMap.set(entryKey, entry);
-		totalsByCurrency.set(
-			currency,
-			(totalsByCurrency.get(currency) ?? 0) + proceeds,
+		salesTotalsByCurrency.set(
+			salesCurrency,
+			(salesTotalsByCurrency.get(salesCurrency) ?? 0) + sales,
+		);
+		proceedsTotalsByCurrency.set(
+			proceedsCurrency,
+			(proceedsTotalsByCurrency.get(proceedsCurrency) ?? 0) + proceeds,
 		);
 	}
 
 	const entries = [...entryMap.values()].sort((a, b) => {
-		const currencyCompare = a.currency.localeCompare(b.currency);
-		if (currencyCompare !== 0) {
-			return currencyCompare;
+		const proceedsCurrencyCompare = a.proceedsCurrency.localeCompare(
+			b.proceedsCurrency,
+		);
+		if (proceedsCurrencyCompare !== 0) {
+			return proceedsCurrencyCompare;
+		}
+		const salesCurrencyCompare = a.salesCurrency.localeCompare(b.salesCurrency);
+		if (salesCurrencyCompare !== 0) {
+			return salesCurrencyCompare;
 		}
 		return b.proceeds - a.proceeds;
 	});
+	const proceedsTotals = formatTotals(proceedsTotalsByCurrency, "proceeds");
+	const salesTotals = formatTotals(salesTotalsByCurrency, "sales");
 
 	return {
 		reportMonth,
 		entries,
-		totalsByCurrency: [...totalsByCurrency.entries()]
-			.map(([currency, proceeds]) => ({ currency, proceeds }))
-			.sort((a, b) => a.currency.localeCompare(b.currency)),
+		proceedsTotalsByCurrency: proceedsTotals,
+		salesTotalsByCurrency: salesTotals,
+		totalsByCurrency: proceedsTotals,
 	};
 }
 
 export function formatSlackMessage(report) {
 	const lines = [
 		`*App Store ${report.reportMonth} のアプリ内課金売上*`,
-		"_Sales and Trends Summary Sales Report / Developer Proceeds basis_",
+		"_Sales: Customer Price basis / Proceeds: Developer Proceeds basis_",
 	];
 
 	if (report.entries.length === 0) {
@@ -240,7 +260,13 @@ export function formatSlackMessage(report) {
 		"```",
 		formatEntriesTable(report.entries),
 		"",
-		formatTotalsTable(report.totalsByCurrency),
+		formatTotalsTable("Sales totals", report.salesTotalsByCurrency, "sales"),
+		"",
+		formatTotalsTable(
+			"Developer proceeds totals",
+			report.proceedsTotalsByCurrency,
+			"proceeds",
+		),
 		"```",
 	].join("\n");
 }
@@ -282,8 +308,14 @@ export async function postSlackMessage(webhookUrl, text, fetchImpl = fetch) {
 
 function formatEntriesTable(entries) {
 	const rows = [
-		["Product", "Type", "Units", "Proceeds"],
-		["-".repeat(28), "-".repeat(7), "-".repeat(8), "-".repeat(18)],
+		["Product", "Type", "Units", "Sales", "Proceeds"],
+		[
+			"-".repeat(24),
+			"-".repeat(7),
+			"-".repeat(8),
+			"-".repeat(18),
+			"-".repeat(18),
+		],
 	];
 
 	for (const entry of entries) {
@@ -292,39 +324,55 @@ function formatEntriesTable(entries) {
 				? `${entry.title} (${entry.parentIdentifier})`
 				: entry.title;
 		rows.push([
-			truncate(title, 28),
+			truncate(title, 24),
 			entry.productTypeIdentifier,
 			formatNumber(entry.units),
-			formatMoney(entry.proceeds, entry.currency),
+			formatMoney(entry.sales, entry.salesCurrency),
+			formatMoney(entry.proceeds, entry.proceedsCurrency),
 		]);
 	}
 
 	return rows
 		.map(
-			([product, type, units, proceeds]) =>
-				`${product.padEnd(28)} | ${type.padEnd(7)} | ${units.padStart(
+			([product, type, units, sales, proceeds]) =>
+				`${product.padEnd(24)} | ${type.padEnd(7)} | ${units.padStart(
 					8,
-				)} | ${proceeds.padStart(18)}`,
+				)} | ${sales.padStart(18)} | ${proceeds.padStart(18)}`,
 		)
 		.join("\n");
 }
 
-function formatTotalsTable(totalsByCurrency) {
+function formatTotalsTable(title, totalsByCurrency, valueKey) {
 	const rows = [
-		["Currency", "Total Proceeds"],
+		["Currency", valueKey === "sales" ? "Total Sales" : "Total Proceeds"],
 		["-".repeat(8), "-".repeat(18)],
 		...totalsByCurrency.map((total) => [
 			total.currency,
-			formatMoney(total.proceeds, total.currency),
+			formatMoney(total[valueKey], total.currency),
 		]),
 	];
 
-	return rows
+	const table = rows
 		.map(
 			([currency, proceeds]) =>
 				`${currency.padEnd(8)} | ${proceeds.padStart(18)}`,
 		)
 		.join("\n");
+
+	return `${title}\n${table}`;
+}
+
+function formatTotals(totalsByCurrency, valueKey) {
+	return [...totalsByCurrency.entries()]
+		.map(([currency, value]) => ({ currency, [valueKey]: value }))
+		.sort((a, b) => a.currency.localeCompare(b.currency));
+}
+
+function calculateCustomerSales(units, customerPricePerUnit) {
+	if (units === 0) {
+		return customerPricePerUnit;
+	}
+	return Math.abs(units) * customerPricePerUnit;
 }
 
 function parseNumber(value) {

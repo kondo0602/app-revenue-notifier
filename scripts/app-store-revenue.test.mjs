@@ -182,31 +182,65 @@ test("summarizes only App Store IAP and subscription rows", () => {
 		report.entries.map((entry) => ({
 			title: entry.title,
 			type: entry.productTypeIdentifier,
-			currency: entry.currency,
+			salesCurrency: entry.salesCurrency,
+			proceedsCurrency: entry.proceedsCurrency,
 			units: entry.units,
+			sales: entry.sales,
 			proceeds: entry.proceeds,
 		})),
 		[
 			{
 				title: "Monthly Premium",
 				type: "IAY",
-				currency: "JPY",
+				salesCurrency: "JPY",
+				proceedsCurrency: "JPY",
 				units: 3,
+				sales: 2100,
 				proceeds: 1500,
 			},
 			{
 				title: "Coin Pack",
 				type: "IA1",
-				currency: "USD",
+				salesCurrency: "USD",
+				proceedsCurrency: "USD",
 				units: 8,
+				sales: 7.92,
 				proceeds: 5.6,
 			},
 		],
 	);
-	assert.deepEqual(report.totalsByCurrency, [
+	assert.deepEqual(report.salesTotalsByCurrency, [
+		{ currency: "JPY", sales: 2100 },
+		{ currency: "USD", sales: 7.92 },
+	]);
+	assert.deepEqual(report.proceedsTotalsByCurrency, [
 		{ currency: "JPY", proceeds: 1500 },
 		{ currency: "USD", proceeds: 5.6 },
 	]);
+});
+
+test("keeps customer sales separate from developer proceeds", () => {
+	const report = summarizeAppStoreSalesRows(
+		[
+			{
+				Title: "Example IAP",
+				"Product Type Identifier": "IA1",
+				Units: "6",
+				"Customer Price": "74",
+				"Customer Currency": "JPY",
+				"Developer Proceeds": "49.3333333333",
+				"Currency of Proceeds": "JPY",
+				"Parent Identifier": "parent.app",
+			},
+		],
+		"2026-05",
+	);
+
+	assert.deepEqual(report.salesTotalsByCurrency, [
+		{ currency: "JPY", sales: 444 },
+	]);
+	assert.equal(report.proceedsTotalsByCurrency[0].currency, "JPY");
+	assert.equal(roundMoney(report.proceedsTotalsByCurrency[0].proceeds), 296);
 });
 
 test("formats a Slack message with entries and currency totals", () => {
@@ -217,7 +251,14 @@ test("formats a Slack message with entries and currency totals", () => {
 	assert.match(message, /App Store 2026-05 のアプリ内課金売上/);
 	assert.match(message, /Monthly Premium/);
 	assert.match(message, /Coin Pack/);
+	assert.match(message, /Total Sales/);
+	assert.match(message, /JPY 2,100\.00/);
+	assert.match(message, /Total Proceeds/);
 	assert.match(message, /JPY 1,500\.00/);
 	assert.match(message, /USD 5\.60/);
 	assert.doesNotMatch(message, /App Download/);
 });
+
+function roundMoney(value) {
+	return Math.round(value * 100) / 100;
+}

@@ -171,7 +171,7 @@ AdMobの日次収益レポートは以下のような形式です：
 ```
 ```
 
-App Storeの月次アプリ内課金売上レポートは、対象月、商品別のUnits/Developer Proceeds、通貨別合計をSlackに送信します。金額はApp Store Sales and Trendsの`Developer Proceeds`ベースで、複数通貨は換算せず通貨別に表示します。
+App Storeの月次アプリ内課金売上レポートは、対象月、商品別のUnits/Sales/Developer Proceeds、通貨別合計をSlackに送信します。`Sales`はApp Store Sales and Trendsの`Customer Price`ベース、`Developer Proceeds`は税金とApple手数料を差し引いた開発者収益ベースです。複数通貨は換算せず通貨別に表示します。
 
 ## 注意事項
 
