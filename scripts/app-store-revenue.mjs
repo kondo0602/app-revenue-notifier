@@ -48,7 +48,7 @@ export function validateReportMonth(reportMonth) {
 }
 
 export function getReportDate(reportMonth) {
-	return `${validateReportMonth(reportMonth)}-01`;
+	return validateReportMonth(reportMonth);
 }
 
 export function getReportMonthFromArgs(argv, env = process.env) {

@@ -170,7 +170,7 @@ test("calculates the previous report month in JST", () => {
 		getDefaultReportMonth(new Date("2026-01-05T15:00:00.000Z")),
 		"2025-12",
 	);
-	assert.equal(getReportDate("2026-05"), "2026-05-01");
+	assert.equal(getReportDate("2026-05"), "2026-05");
 });
 
 test("summarizes only App Store IAP and subscription rows", () => {
