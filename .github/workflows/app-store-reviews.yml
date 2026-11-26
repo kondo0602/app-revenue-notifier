@@ -1,0 +1,49 @@
+name: Notify App Store Reviews
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+      timezone: "Asia/Tokyo"
+  workflow_dispatch:
+    inputs:
+      review_date:
+        description: "Review date in YYYY-MM-DD. Leave empty to use yesterday in JST."
+        required: false
+        type: string
+      dry_run:
+        description: "Fetch reviews and log counts without posting to Slack."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-reviews
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run notify:app-store-reviews
+        env:
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_PRIVATE_KEY_BASE64 }}
+          REVIEW_DATE: ${{ inputs.review_date }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

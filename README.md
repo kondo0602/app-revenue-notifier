@@ -1,6 +1,6 @@
 # App Revenue Notifier
 
-AdMobの収益レポートとApp Storeの月次アプリ内課金売上をSlackに通知するアプリケーションです。
+AdMobの収益レポート、App Storeの月次アプリ内課金売上、App Storeの日次レビューをSlackに通知するアプリケーションです。
 
 ## 概要
 
@@ -104,6 +104,15 @@ base64 -w 0 AuthKey_XXXXXXXXXX.p8
 `.github/workflows/app-store-revenue.yml`により、毎月6日 09:17 JSTに前月分のApp Store月次アプリ内課金売上を通知します。
 
 GitHub Actionsの`workflow_dispatch`から手動実行できます。`report_month`に`YYYY-MM`を指定すると任意の対象月を通知し、未指定の場合はJST基準の前月を通知します。
+
+### App Store日次レビュー通知
+
+`Notify App Store Reviews` は毎朝09:17（日本時間）に実行されます。対象は「1人でウミガメのスープ」（`6544801645`）と「ノノプラネット」（`6836679773`）です。全地域のレビューから、日本時間で前日に作成されたレビューを抽出します。2アプリとも0件の日はSlack投稿を省略します。
+
+月次売上通知と同じ `APPSTORE_ISSUER_ID`、`APPSTORE_KEY_ID`、`APPSTORE_PRIVATE_KEY_BASE64`、`SLACK_WEBHOOK_URL` を使用します。APIキーには両方のアプリのレビューを取得できる権限が必要です。
+
+初回はGitHub Actionsの手動実行で `dry_run` を選択し、ログで2アプリの取得結果を確認します。`review_date` には `YYYY-MM-DD` 形式で対象日を指定できます。空欄の場合は日本時間の前日です。`dry_run` をオフにして同じ対象日を実行すると、その日のレビューを再投稿します。
+
 
 ## 開発
 
