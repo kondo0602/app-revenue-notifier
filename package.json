@@ -4,7 +4,7 @@
 		"lint": "biome check --write src/* scripts/*.mjs",
 		"notify:app-store": "node scripts/notify-app-store-revenue.mjs",
 		"notify:app-store-reviews": "node scripts/notify-app-store-reviews.mjs",
-		"test:app-store": "node --test scripts/app-store-revenue.test.mjs"
+		"test:app-store": "node --test scripts/app-store-*.test.mjs"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4"

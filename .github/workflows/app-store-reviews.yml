@@ -7,16 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       review_date:
-        description: "Review date in YYYY-MM-DD. Leave empty to use yesterday in JST."
+        description: "Review date in YYYY-MM-DD. Leave empty to check the last 3 completed days in JST."
         required: false
         type: string
       dry_run:
-        description: "Fetch reviews and log counts without posting to Slack."
+        description: "Log fetched and unsent counts without posting to Slack or saving history."
         type: boolean
         default: true
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: app-store-reviews
@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         with:
@@ -44,6 +46,7 @@ jobs:
           APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
           APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           APPSTORE_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_PRIVATE_KEY_BASE64 }}
+          GITHUB_TOKEN: ${{ github.token }}
           REVIEW_DATE: ${{ inputs.review_date }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

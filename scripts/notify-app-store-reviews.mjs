@@ -4,6 +4,7 @@ import {
 	createAppStoreConnectJwt,
 	postSlackMessage,
 } from "./app-store-revenue.mjs";
+import { loadReviewState } from "./app-store-review-state.mjs";
 
 const APPS = [
 	{ id: "6544801645", name: "1人でウミガメのスープ" },
@@ -12,11 +13,14 @@ const APPS = [
 const APP_STORE_CONNECT = "https://api.appstoreconnect.apple.com";
 const JST_OFFSET = 9 * 60 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
+const LOOKBACK_DAYS = 3;
+
+function jstDate(timestamp) {
+	return new Date(timestamp + JST_OFFSET).toISOString().slice(0, 10);
+}
 
 export function getReviewWindow(reportDate, now = new Date()) {
-	const date =
-		reportDate ||
-		new Date(now.getTime() + JST_OFFSET - DAY).toISOString().slice(0, 10);
+	const date = reportDate || jstDate(now.getTime() - DAY);
 	const midnight = new Date(`${date}T00:00:00Z`);
 	if (
 		!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
@@ -25,8 +29,11 @@ export function getReviewWindow(reportDate, now = new Date()) {
 	) {
 		throw new Error("REVIEW_DATE must be a valid date in YYYY-MM-DD format");
 	}
-	const start = midnight.getTime() - JST_OFFSET;
-	return { date, start, end: start + DAY };
+	const end = midnight.getTime() - JST_OFFSET + DAY;
+	const start = end - (reportDate ? 1 : LOOKBACK_DAYS) * DAY;
+	const firstDate = jstDate(start);
+	const label = firstDate === date ? date : `${firstDate}〜${date}`;
+	return { label, start, end };
 }
 
 export async function fetchReviews(app, window, token, fetchImpl = fetch) {
@@ -59,13 +66,22 @@ export async function fetchReviews(app, window, token, fetchImpl = fetch) {
 			);
 		}
 		const page = await response.json();
-		for (const { attributes } of page.data) {
+		for (const { id, attributes } of page.data) {
 			const createdAt = Date.parse(attributes.createdDate);
 			if (!Number.isFinite(createdAt)) {
 				throw new Error(`Invalid review date returned for ${app.name}`);
 			}
 			if (createdAt < window.start) return reviews;
-			if (createdAt < window.end) reviews.push(attributes);
+			if (createdAt < window.end) {
+				if (typeof id !== "string" || !id) {
+					throw new Error(`Missing review ID for ${app.name}`);
+				}
+				reviews.push({
+					...attributes,
+					id: `${app.id}:${id}`,
+					date: jstDate(createdAt),
+				});
+			}
 		}
 		next = page.links?.next;
 	}
@@ -81,28 +97,63 @@ function slackText(value, limit) {
 		.replaceAll(">", "&gt;");
 }
 
-function formatMessages(date, results) {
+function formatMessages(label, results) {
 	const count = results.reduce(
 		(total, { reviews }) => total + reviews.length,
 		0,
 	);
-	const heading = `*App Storeレビュー | ${date}（日本時間） | ${count}件*`;
+	const heading = `*App Storeレビュー | ${label}（日本時間） | 未通知${count}件*`;
 	const messages = [];
-	let message = heading;
+	let message = { text: heading, ids: [] };
 	for (const { app, reviews } of results) {
-		const appHeading = `*${app.name} | ${reviews.length}件*`;
-		if (reviews.length > 0) message += `\n\n${appHeading}`;
+		const appHeading = `\n\n*${app.name} | ${reviews.length}件*`;
+		let section = appHeading;
 		for (const review of reviews) {
-			const entry = `★${review.rating}/5（${slackText(review.territory, 12)}） ${slackText(review.title, 120)}\n${slackText(review.body, 500)}`;
-			if (message.length + entry.length + 2 > 3500) {
+			const entry = `\n\n${review.date} ★${review.rating}/5（${slackText(review.territory, 12)}） ${slackText(review.title, 120)}\n${slackText(review.body, 500)}`;
+			if (
+				message.text.length + section.length + entry.length > 3500 &&
+				message.ids.length
+			) {
 				messages.push(message);
-				message = `${heading}（続き）\n\n${appHeading}`;
+				message = { text: `${heading}（続き）`, ids: [] };
+				section = appHeading;
 			}
-			message += `\n\n${entry}`;
+			message.text += section + entry;
+			message.ids.push(review.id);
+			section = "";
 		}
 	}
-	messages.push(message);
+	if (message.ids.length) messages.push(message);
 	return messages;
+}
+
+export async function notifyUnpostedReviews({
+	label,
+	results,
+	state,
+	dryRun,
+	post,
+}) {
+	const seen = new Set(state.postedIds);
+	const pending = results.map(({ app, reviews }) => {
+		const unposted = reviews.filter(({ id }) => {
+			if (seen.has(id)) return false;
+			seen.add(id);
+			return true;
+		});
+		console.log(
+			`${label} ${app.name}: ${reviews.length} reviews, ${unposted.length} unposted`,
+		);
+		return { app, reviews: unposted };
+	});
+	if (dryRun) return;
+	const messages = formatMessages(label, pending);
+	if (!messages.length) return;
+	await state.prepare();
+	for (const { text, ids } of messages) {
+		await post(text);
+		await state.save(ids);
+	}
 }
 
 async function main(env) {
@@ -131,13 +182,13 @@ async function main(env) {
 			reviews: await fetchReviews(app, window, token),
 		})),
 	);
-	for (const { app, reviews } of results) {
-		console.log(`${window.date} ${app.name}: ${reviews.length} reviews`);
-	}
-	if (dryRun || results.every(({ reviews }) => reviews.length === 0)) return;
-	for (const message of formatMessages(window.date, results)) {
-		await postSlackMessage(env.SLACK_WEBHOOK_URL, message);
-	}
+	await notifyUnpostedReviews({
+		label: window.label,
+		results,
+		state: await loadReviewState(env),
+		dryRun,
+		post: (message) => postSlackMessage(env.SLACK_WEBHOOK_URL, message),
+	});
 }
 
 if (
